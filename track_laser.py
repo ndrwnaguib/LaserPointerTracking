@@ -1,36 +1,47 @@
+# Code isn't encrypted , feel free to copy from it, if it's gonna help you :).
+
+from collections import deque
+from dollar import *
 import cv2
 import numpy as np
+import argparse
 
 cap = cv2.VideoCapture(0)
+ap = argparse.ArgumentParser()
+ap.add_argument("-v", "--video",
+                help="path to the (optional) video file")
+ap.add_argument("-b", "--buffer", type=int, default=64,
+                help="max buffer size")
+args = vars(ap.parse_args())
 
-while(1):
-
+# pts is an array that holds laser points ( sequence )
+pts = deque(maxlen=args["buffer"])
+while (1):
+    # Making sure every point is non  zero,zero
+    if not all(pts):
+        pts = deque(maxlen=args["buffer"])
     # Take each frame
     _, frame = cap.read()
-
-    # Convert BGR to HSV
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    # define range of red color in HSV
-    lower_red = np.array([170, 50, 50])
-    upper_red = np.array([180, 255, 255])
+    lower_red = np.array([0, 0, 255])
+    upper_red = np.array([255, 255, 255])
 
-    # Threshold the HSV image to get only red colors
     mask = cv2.inRange(hsv, lower_red, upper_red)
+    (minVal, maxVal, minLoc, maxLoc) = cv2.minMaxLoc(mask)
+    # maxLoc represents laser point at a frame
+    pts.appendleft(maxLoc)
+    for i in xrange(1, len(pts)):
+        # Drawing connected line
+        cv2.line(frame, pts[i - 1], pts[i], (0, 0, 0), 2)
+    # Please check dollar.py for more clarification about recognize
+    Name, Score = recognize(pts, templates)
+    cv2.putText(frame, "(" + Name + " " + "%.2f" % Score + ")", (20, 50), cv2.FONT_HERSHEY_PLAIN, 1.0, (0, 0, 0), 1)
+    cv2.imshow('Draw Shapes', frame)
+    cv2.imshow('frame', mask)
 
-    # Bitwise-AND mask and original image
-    res = cv2.bitwise_and(frame,frame, mask= mask)
-    cnts = cv2.findContours(mask.copy(), cv2.RETR_EXTERNAL,
-                            cv2.CHAIN_APPROX_SIMPLE)[-2]
-    c = max(cnts, key=cv2.contourArea)
-    ((x, y), radius) = cv2.minEnclosingCircle(c)
-    M = cv2.moments(c)
-    center = (int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"]))
-    cv2.circle(frame, center, 30, (0, 0, 0), 2)
-
-    cv2.imshow('frame',frame)
-    k = cv2.waitKey(5) & 0xFF
-    if k == 100:
+    if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cv2.destroyAllWindows()
+cap.release()
